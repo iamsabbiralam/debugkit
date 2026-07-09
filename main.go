@@ -5,14 +5,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 func main() {
 	mux := http.NewServeMux()
 	// 1. Simple dummy route
-	mux.HandleFunc("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
+	/* mux.HandleFunc("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"message": "Users loaded successfully"}`))
+	}) */
+	// ইউজারদের ডামি রাউট (ডাটাবেজ কুয়েরিসহ)
+	mux.HandleFunc("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
+		queryStr := "SELECT id, name, email FROM users WHERE status = 'active' LIMIT 10;"
+
+		// আমাদের SQL Interceptor দিয়ে কুয়েরি ট্র্যাক করা
+		TrackQuery(queryStr, func() error {
+			time.Sleep(120 * time.Millisecond) // ডাটাবেজ লেটেন্সি সিমুলেট করলাম
+			return nil
+		})
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"message": "Hello Sabbir, Users list fetched from DB!"}`))
 	})
 
 	// Dedicated route to view goroutine stack

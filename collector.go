@@ -31,15 +31,24 @@ type SystemSnapshot struct {
 type DebugDataResponse struct {
 	System   SystemSnapshot `json:"system"`
 	Requests []RequestLog   `json:"requests"`
+	SQLs     []SQLQueryLog  `json:"sql_queries"`
 }
 
 type Collector struct {
-	mu       sync.Mutex
-	Requests []RequestLog
+	mu         sync.Mutex
+	Requests   []RequestLog
+	SQLQueries []SQLQueryLog
+}
+
+type SQLQueryLog struct {
+	Query     string        `json:"query"`
+	Duration  time.Duration `json:"duration_ms"`
+	Timestamp time.Time     `json:"timestamp"`
 }
 
 var Instance = &Collector{
-	Requests: make([]RequestLog, 0),
+	Requests:   make([]RequestLog, 0),
+	SQLQueries: make([]SQLQueryLog, 0),
 }
 
 func (c *Collector) AddRequest(log RequestLog) {
@@ -52,16 +61,29 @@ func (c *Collector) AddRequest(log RequestLog) {
 	c.Requests = append(c.Requests, log)
 }
 
+func (c *Collector) AddSQLQuery(log SQLQueryLog) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if len(c.SQLQueries) > 100 {
+		c.SQLQueries = c.SQLQueries[1:]
+	}
+	c.SQLQueries = append(c.SQLQueries, log)
+}
+
 // this is the main function that will be called to get the full debug data
 func (c *Collector) GetFullStats() DebugDataResponse {
 	c.mu.Lock()
 	reqs := make([]RequestLog, len(c.Requests))
-	copy(reqs, c.Requests) // for thread safety, we copy the slice to
+	copy(reqs, c.Requests)
+
+	sqls := make([]SQLQueryLog, len(c.SQLQueries))
+	copy(sqls, c.SQLQueries)
 	c.mu.Unlock()
 
-	// live memory data reading
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
+
 	return DebugDataResponse{
 		System: SystemSnapshot{
 			ActiveGoroutines: runtime.NumGoroutine(),
@@ -70,6 +92,7 @@ func (c *Collector) GetFullStats() DebugDataResponse {
 			HeapObjects:      m.HeapObjects,
 		},
 		Requests: reqs,
+		SQLs:     sqls,
 	}
 }
 
