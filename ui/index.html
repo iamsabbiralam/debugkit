@@ -58,7 +58,6 @@
             }
       </style>
       <script>
-            // Tailwind config override to ensure premium colors are mapped correctly
             tailwind.config = {
                   theme: {
                         extend: {
@@ -271,16 +270,49 @@
 
             </div>
 
-            <!-- SQL Query Analytics Panel -->
+            <!-- SQL Query Analytics Panel with Live Filtering & Search -->
             <div class="glass-panel rounded-2xl p-6">
-                  <div class="mb-5">
-                        <div class="flex items-center gap-2">
-                              <div class="h-2 w-2 rounded-full bg-cyan-500 shadow-md shadow-cyan-400"></div>
-                              <h2 class="text-xs font-bold text-white uppercase tracking-wider">SQL Intelligence
-                                    Interceptor Layer</h2>
+                  <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-5">
+                        <div>
+                              <div class="flex items-center gap-2">
+                                    <div class="h-2 w-2 rounded-full bg-cyan-500 shadow-md shadow-cyan-400"></div>
+                                    <h2 class="text-xs font-bold text-white uppercase tracking-wider">SQL Intelligence
+                                          Interceptor Layer</h2>
+                              </div>
+                              <p class="text-[11px] text-gray-500 mt-1">Intercepting raw SQL statements, drivers latency
+                                    analysis, and bottlenecks profiling</p>
                         </div>
-                        <p class="text-[11px] text-gray-500 mt-1">Intercepting raw SQL statements, drivers latency
-                              analysis, and bottlenecks profiling</p>
+
+                        <!-- Advanced Filtration Suite -->
+                        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
+                              <!-- Dynamic Search Field -->
+                              <div class="relative flex-1 sm:w-64">
+                                    <span
+                                          class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-600">
+                                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor"
+                                                viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                          </svg>
+                                    </span>
+                                    <input type="text" id="sql-search-input" oninput="applySqlFilters()"
+                                          placeholder="Search queries or tables..."
+                                          class="w-full bg-gray-950/90 text-xs text-gray-200 pl-9 pr-4 py-2 rounded-xl border border-gray-900 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 placeholder-gray-600 transition-all font-mono">
+                              </div>
+
+                              <!-- Statement Token Badges (Quick Filter) -->
+                              <div
+                                    class="flex items-center gap-1.5 bg-gray-950/50 p-1 rounded-xl border border-gray-900/60 overflow-x-auto">
+                                    <button onclick="setSqlTypeFilter('ALL')" id="btn-filter-all"
+                                          class="text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer bg-cyan-500/10 text-cyan-400 border-cyan-500/20">ALL</button>
+                                    <button onclick="setSqlTypeFilter('SELECT')" id="btn-filter-select"
+                                          class="text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer text-gray-500 border-transparent hover:text-gray-300">SELECT</button>
+                                    <button onclick="setSqlTypeFilter('INSERT')" id="btn-filter-insert"
+                                          class="text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer text-gray-500 border-transparent hover:text-gray-300">INSERT</button>
+                                    <button onclick="setSqlTypeFilter('UPDATE')" id="btn-filter-update"
+                                          class="text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer text-gray-500 border-transparent hover:text-gray-300">UPDATE</button>
+                              </div>
+                        </div>
                   </div>
 
                   <div class="overflow-x-auto max-h-[350px] rounded-xl border border-gray-900 bg-gray-950/60">
@@ -304,6 +336,10 @@
 
       <!-- Core Dynamic Data Poller JS Engine -->
       <script>
+            // Global Local Storage Matrix to prevent layout flickering on state reload
+            let cachedSqlQueries = [];
+            let activeSqlTypeFilter = 'ALL';
+
             async function loadData() {
                   try {
                         const res = await fetch('/debugkit/api');
@@ -353,28 +389,65 @@
                               tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-600 font-medium">No HTTP context telemetry stream captured yet.</td></tr>`;
                         }
 
-                        // Database Engine Interception Mapping
-                        const sqlTbody = document.getElementById('sql-table-body');
-                        sqlTbody.innerHTML = '';
+                        // Cache incoming SQL telemetry rows and invoke hot filtering layer
+                        cachedSqlQueries = data.sql_queries || [];
+                        applySqlFilters();
 
-                        if (data.sql_queries && data.sql_queries.length > 0) {
-                              [...data.sql_queries].reverse().forEach(sql => {
-                                    const sqlSpeedClass = sql.duration_ms > 100 ? 'text-rose-400 font-extrabold' :
-                                          sql.duration_ms > 30 ? 'text-amber-400' : 'text-cyan-400';
-                                    sqlTbody.innerHTML += `
-                            <tr class="hover:bg-white/[0.02] transition-colors">
-                                <td class="p-3 pl-4 font-mono text-emerald-400 break-all select-all max-w-2xl leading-relaxed">${sql.query}</td>
-                                <td class="p-3 text-right font-mono font-semibold ${sqlSpeedClass}">${sql.duration_ms} <span class="text-[10px] text-gray-600 font-normal">ms</span></td>
-                                <td class="p-3 text-right text-[11px] text-gray-500 font-mono pr-4">${new Date(sql.timestamp).toLocaleTimeString()}</td>
-                            </tr>
-                        `;
-                              });
-                        } else {
-                              sqlTbody.innerHTML = `<tr><td colspan="3" class="p-8 text-center text-gray-600 font-medium">No relational database logs intercepted via driver wrappers.</td></tr>`;
-                        }
                   } catch (err) {
                         console.error("DebugKit Sync Interruption:", err);
                   }
+            }
+
+            // SQL Live Render & Advanced Filter Processor
+            function applySqlFilters() {
+                  const searchKeyword = document.getElementById('sql-search-input').value.toLowerCase().trim();
+                  const sqlTbody = document.getElementById('sql-table-body');
+                  sqlTbody.innerHTML = '';
+
+                  // Run high performance array filtration mappings
+                  const filteredQueries = cachedSqlQueries.filter(sql => {
+                        const queryText = sql.query.toLowerCase();
+
+                        // Token verification
+                        const matchesSearch = queryText.includes(searchKeyword);
+                        const matchesType = activeSqlTypeFilter === 'ALL' || queryText.startsWith(activeSqlTypeFilter.toLowerCase());
+
+                        return matchesSearch && matchesType;
+                  });
+
+                  if (filteredQueries.length > 0) {
+                        [...filteredQueries].reverse().forEach(sql => {
+                              const sqlSpeedClass = sql.duration_ms > 100 ? 'text-rose-400 font-extrabold' :
+                                    sql.duration_ms > 30 ? 'text-amber-400' : 'text-cyan-400';
+                              sqlTbody.innerHTML += `
+                        <tr class="hover:bg-white/[0.02] transition-colors">
+                            <td class="p-3 pl-4 font-mono text-emerald-400 break-all select-all max-w-2xl leading-relaxed">${sql.query}</td>
+                            <td class="p-3 text-right font-mono font-semibold ${sqlSpeedClass}">${sql.duration_ms} <span class="text-[10px] text-gray-600 font-normal">ms</span></td>
+                            <td class="p-3 text-right text-[11px] text-gray-500 font-mono pr-4">${new Date(sql.timestamp).toLocaleTimeString()}</td>
+                        </tr>
+                    `;
+                        });
+                  } else {
+                        sqlTbody.innerHTML = `<tr><td colspan="3" class="p-8 text-center text-gray-600 font-medium">No relational database logs match your active filter/search criteria.</td></tr>`;
+                  }
+            }
+
+            // Token Badge UI State Engine
+            function setSqlTypeFilter(type) {
+                  activeSqlTypeFilter = type;
+                  const tokens = ['ALL', 'SELECT', 'INSERT', 'UPDATE'];
+
+                  tokens.forEach(t => {
+                        const btn = document.getElementById(`btn-filter-${t.toLowerCase()}`);
+                        if (t === type) {
+                              btn.className = "text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer bg-cyan-500/10 text-cyan-400 border-cyan-500/20";
+                        } else {
+                              btn.className = "text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer text-gray-500 border-transparent hover:text-gray-300";
+                        }
+                  });
+
+                  // Trigger reactive view update
+                  applySqlFilters();
             }
 
             async function loadStackTrace() {

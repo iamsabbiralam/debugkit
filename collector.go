@@ -1,4 +1,4 @@
-package main
+package debugkit
 
 import (
 	"bytes"
@@ -27,6 +27,12 @@ type SystemSnapshot struct {
 	HeapObjects      uint64 `json:"heap_objects"`       // Number of objects in the heap
 }
 
+type SQLQueryLog struct {
+	Query     string        `json:"query"`
+	Duration  time.Duration `json:"duration_ms"`
+	Timestamp time.Time     `json:"timestamp"`
+}
+
 // combined response structure (for dashboard)
 type DebugDataResponse struct {
 	System   SystemSnapshot `json:"system"`
@@ -40,21 +46,15 @@ type Collector struct {
 	SQLQueries []SQLQueryLog
 }
 
-type SQLQueryLog struct {
-	Query     string        `json:"query"`
-	Duration  time.Duration `json:"duration_ms"`
-	Timestamp time.Time     `json:"timestamp"`
-}
-
-var Instance = &Collector{
-	Requests:   make([]RequestLog, 0),
-	SQLQueries: make([]SQLQueryLog, 0),
-}
+// global Instance variable to hold the Collector instance, shared across the debugkit package
+var Instance *Collector
 
 func (c *Collector) AddRequest(log RequestLog) {
+	if c == nil {
+		return
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
 	if len(c.Requests) > 100 {
 		c.Requests = c.Requests[1:]
 	}
@@ -62,21 +62,24 @@ func (c *Collector) AddRequest(log RequestLog) {
 }
 
 func (c *Collector) AddSQLQuery(log SQLQueryLog) {
+	if c == nil {
+		return
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
 	if len(c.SQLQueries) > 100 {
 		c.SQLQueries = c.SQLQueries[1:]
 	}
 	c.SQLQueries = append(c.SQLQueries, log)
 }
 
-// this is the main function that will be called to get the full debug data
 func (c *Collector) GetFullStats() DebugDataResponse {
+	if c == nil {
+		return DebugDataResponse{}
+	}
 	c.mu.Lock()
 	reqs := make([]RequestLog, len(c.Requests))
 	copy(reqs, c.Requests)
-
 	sqls := make([]SQLQueryLog, len(c.SQLQueries))
 	copy(sqls, c.SQLQueries)
 	c.mu.Unlock()
@@ -96,16 +99,16 @@ func (c *Collector) GetFullStats() DebugDataResponse {
 	}
 }
 
-// Helper function: convert bytes to readable MB
+func (c *Collector) GetGoroutineStackTrace() string {
+	if c == nil {
+		return "Collector is not initialized"
+	}
+	var buf bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&buf, 1)
+	return buf.String()
+}
+
 func byteToMB(b uint64) string {
 	mb := b / 1024 / 1024
 	return strconv.FormatUint(mb, 10) + " MB"
-}
-
-// Method to get detailed information about running goroutines
-func (c *Collector) GetGoroutineStackTrace() string {
-	var buf bytes.Buffer
-	// debug=1 will give a concise stack trace of all goroutines
-	pprof.Lookup("goroutine").WriteTo(&buf, 1)
-	return buf.String()
 }

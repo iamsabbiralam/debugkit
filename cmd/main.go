@@ -1,4 +1,3 @@
-// main.go
 package main
 
 import (
@@ -6,22 +5,25 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/iamsabbiralam/debugkit"
 )
 
 func main() {
+	// Initialize the global Collector instance
+	debugkit.Instance = &debugkit.Collector{
+		Requests:   make([]debugkit.RequestLog, 0),
+		SQLQueries: make([]debugkit.SQLQueryLog, 0),
+	}
+
 	mux := http.NewServeMux()
+
 	// 1. Simple dummy route
-	/* mux.HandleFunc("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"message": "Users loaded successfully"}`))
-	}) */
-	// ইউজারদের ডামি রাউট (ডাটাবেজ কুয়েরিসহ)
 	mux.HandleFunc("/api/v1/users", func(w http.ResponseWriter, r *http.Request) {
 		queryStr := "SELECT id, name, email FROM users WHERE status = 'active' LIMIT 10;"
 
-		// আমাদের SQL Interceptor দিয়ে কুয়েরি ট্র্যাক করা
-		TrackQuery(queryStr, func() error {
-			time.Sleep(120 * time.Millisecond) // ডাটাবেজ লেটেন্সি সিমুলেট করলাম
+		debugkit.TrackQuery(queryStr, func() error {
+			time.Sleep(120 * time.Millisecond)
 			return nil
 		})
 
@@ -31,21 +33,18 @@ func main() {
 
 	// Dedicated route to view goroutine stack
 	mux.HandleFunc("/debugkit/goroutines", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain") // This will display as readable text in the browser
+		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		stackTrace := Instance.GetGoroutineStackTrace()
+		stackTrace := debugkit.Instance.GetGoroutineStackTrace()
 		w.Write([]byte(stackTrace))
 	})
 
-	// 2. Dangerous route! Hitting this will cause a goroutine to be stuck forever (Leak)
+	// 2. Dangerous route! (Leak)
 	mux.HandleFunc("/api/v1/leak", func(w http.ResponseWriter, r *http.Request) {
-		// This channel will never be closed or receive data
 		ch := make(chan int)
-
-		// Create a goroutine leak
 		go func() {
-			val := <-ch // This will cause the goroutine to hang forever
+			val := <-ch
 			fmt.Println(val)
 		}()
 
@@ -53,19 +52,18 @@ func main() {
 		w.Write([]byte(`{"message": "Oops! One goroutine leaked successfully."}`))
 	})
 
-	// 3. Updated DebugKit API route
+	// 3. DebugKit API route
 	mux.HandleFunc("/debugkit/api", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		// Now we will send the complete combined stats
-		stats := Instance.GetFullStats()
+		stats := debugkit.Instance.GetFullStats()
 		json.NewEncoder(w).Encode(stats)
 	})
 
-	mux.HandleFunc("/debugkit", DebugDashboardUIHandler)
+	mux.HandleFunc("/debugkit", debugkit.DebugDashboardUIHandler)
 
-	finalHandler := DebuggerMiddleware(mux)
+	finalHandler := debugkit.DebuggerMiddleware(mux)
 
 	fmt.Println("🔥 DebugKit Engine with Memory & Goroutine Tracker Started!")
 	fmt.Println("📌 normal route: http://localhost:8080/api/v1/users")

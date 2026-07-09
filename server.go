@@ -1,5 +1,5 @@
 // server.go
-package main
+package debugkit
 
 import (
 	"embed"
@@ -7,7 +7,6 @@ import (
 )
 
 // go runtime knows to embed everything in the ui folder into this variable
-//
 //go:embed ui/*
 var uiAssets embed.FS
 
