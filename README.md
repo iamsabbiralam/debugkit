@@ -7,6 +7,8 @@
 DebugKit is a lightweight, zero-dependency, real-time telemetry and goroutine leak tracking engine for Go (Golang) applications. It automatically monitors active goroutines, memory allocations, and SQL query performance, exposing everything through a beautiful embedded dashboard running directly inside your application.
 
 ---
+![Dashboard](image.png)
+---
 
 ## 🌟 Key Features
 
